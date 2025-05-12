@@ -1,44 +1,41 @@
 import socket
-import threading
+import select
 import time
 
-clients = []  # 클라이언트 소켓 리스트
+BUFFER = 1024
+PORT = 2500
 
-def handle_client(client_socket, addr):
-    while True:
-        try:
-            data = client_socket.recv(1024)
-            if not data:
-                break
-            # 'quit'을 수신하면 해당 클라이언트를 목록에서 삭제
-            if 'quit' in data.decode():
-                if client_socket in clients:
-                    print(addr, 'exited')
-                    clients.remove(client_socket)
-                break
-            print(time.asctime() + str(addr) + ':' + data.decode())
-            # 모든 클라이언트에게 전송
-            for client in clients:
-                if client != client_socket:
-                    client.send(data)
-        except:
-            if client_socket in clients:
-                clients.remove(client_socket)
-            break
-    client_socket.close()
+s_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s_sock.bind(('', PORT))
+s_sock.listen(5)
 
-def main():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('', 2500))
-    server_socket.listen(5)
-    print('Server Started')
-    while True:
-        client_socket, addr = server_socket.accept()
-        print('new client', addr)
-        clients.append(client_socket)
-        th = threading.Thread(target=handle_client, args=(client_socket, addr))
-        th.daemon = True
-        th.start()
+socks = [s_sock]  # 소켓 리스트에 서버 소켓 추가
 
-if __name__ == '__main__':
-    main()
+print(str(PORT) + '에서 접속 대기 중')
+
+while True:
+    # 읽기 이벤트(연결요청 및 데이터수신) 대기
+    r_sock, _, _ = select.select(socks, [], [])
+    for s in r_sock:
+        if s == s_sock:
+            # 새로운 클라이언트의 연결 요청 이벤트 발생
+            c_sock, addr = s_sock.accept()
+            socks.append(c_sock)
+            print('Client ({}) connected'.format(addr))
+        else:
+            # 기존 클라이언트의 데이터 수신 이벤트 발생
+            try:
+                data = s.recv(BUFFER)
+                if not data:
+                    s.close()
+                    socks.remove(s)
+                    continue
+                print(time.asctime() + ' Received:', data.decode())
+                # 모든 클라이언트에게 메시지 전송
+                for client in socks:
+                    if client != s_sock and client != s:
+                        client.send(data)
+            except:
+                s.close()
+                socks.remove(s)

@@ -7,7 +7,7 @@ def handler(sock):
             data = sock.recv(1024)
             if not data:
                 break
-            print(data.decode())
+            print('Received message:', data.decode())
         except:
             break
     sock.close()
@@ -23,7 +23,7 @@ def main():
     th.start()
     while True:
         try:
-            msg = '[' + my_id + '] ' + input()
+            msg = '[' + my_id + '] ' + input('Message to send: ')
             sock.send(msg.encode())
             if 'quit' in msg:
                 break
